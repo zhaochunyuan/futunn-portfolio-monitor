@@ -1,0 +1,14 @@
+services:
+  futunn-monitor:
+    build: .
+    image: futunn-portfolio-monitor:latest
+    container_name: futunn-monitor
+    restart: unless-stopped
+    env_file:
+      - .env
+    # 不需要对外暴露端口（这是一个后台轮询程序）
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

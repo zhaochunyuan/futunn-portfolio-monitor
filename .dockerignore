@@ -1,0 +1,16 @@
+.git
+.gitignore
+.env
+.env.*
+venv/
+__pycache__/
+*.pyc
+*.log
+.DS_Store
+README.md
+LICENSE
+.github/
+futunn-monitor.service
+Dockerfile
+docker-compose.yml
+.dockerignore

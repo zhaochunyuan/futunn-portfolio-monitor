@@ -1,9 +1,12 @@
-# 富途牛牛模拟组合监控（钉钉推送版）
+# 富途牛牛模拟组合监控
 
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python](https://img.shields.io/badge/Python-3.8+-blue.svg)](https://www.python.org/)
+[![Docker](https://img.shields.io/badge/Docker-Ready-2496ED.svg)](https://www.docker.com/)
 
-监控富途牛牛 APP 中社区模拟组合的持仓变动，通过**钉钉机器人**推送完整的 Markdown 表格通知（调仓变动 + 当前持仓 + 成本价/当前价/盈亏）。
+监控富途牛牛 APP 中社区模拟组合的持仓变动，推送完整的 Markdown/ASCII 表格通知（调仓变动 + 当前持仓 + 成本价/当前价/盈亏）。
+
+**支持双推送通道：钉钉（加签）+ Discord**，两个可以同时配、也可以只配一个。
 
 ---
 
@@ -11,14 +14,13 @@
 
 - 🔄 **无需登录富途账户**，直接调用公开 API
 - 📊 **完整表格推送**：调仓类型、名称、代码、仓位变化、成本价、当前价、盈亏一目了然
+- 📨 **双通道推送**：钉钉（加签 markdown 表格）+ Discord（embed + ASCII 对齐表格），同时配置则同时推送
 - ⚡ **秒级检测**：默认 36 秒轮询一次
 - 🎯 **智能阈值**：权重变化 < 2% 不推送（可配置），新增/清仓始终推送
-- 🛡️ **稳定运行**：systemd / launchd / 任务计划程序支持开机自启、崩溃重启
-- 📱 **钉钉原生**：加签模式，表格清晰，手机和 PC 端都能正常显示
+- 🐳 **Docker 就绪**：一行命令拉起
+- 🛡️ **稳定运行**：systemd / launchd / 任务计划程序 / Docker restart 策略全覆盖
 
-## 🖼️ 效果预览
-
-推送的钉钉消息包含两个表格：
+## 🖼️ 推送效果
 
 **调仓变动表：**
 
@@ -42,19 +44,16 @@
 
 `portfolio.futunn.com` 的 API **只对中国大陆和香港 IP 开放**。海外 IP（新加坡、美国、日本等）会被风控拦截，返回 `{"code":-12009}`。
 
-**实测结果：**
-
-| 出口 IP | 结果 |
-|---|---|
-| 🇨🇳 中国大陆（上海） | ✅ `code:0` 返回完整数据 |
-| 🇭🇰 香港 | ✅ 正常 |
-| 🇸🇬 新加坡 | ❌ `code:-12009` |
-| 🇺🇸 美国 | ❌ 被风控 |
+| 出口 IP | 富途 API | Discord 推送 | 钉钉推送 |
+|---|---|---|---|
+| 🇨🇳 中国大陆 | ✅ | ❌（被墙）| ✅ |
+| 🇭🇰 香港 | ✅ | ✅ | ✅ |
+| 🇸🇬 新加坡 / 🇺🇸 美国 | ❌ | ✅ | ✅ |
 
 **推荐部署环境：**
-- 腾讯云/阿里云**香港**轻量服务器（能访问钉钉 + Discord，¥24-30/月）
-- 腾讯云/阿里云**大陆**轻量服务器（只能访问钉钉，¥24/月起）
-- 中国大陆或香港家用网络的 Mac/Windows 电脑
+- 若你想用 **Discord**：选 **香港**服务器（同时能用钉钉）
+- 若只用 **钉钉**：中国大陆或香港服务器都行
+- Mac/Windows 本机：保持网络在大陆或香港（不要挂海外 VPN）
 
 ---
 
@@ -63,48 +62,85 @@
 ### 1. 克隆项目
 
 ```bash
-git clone https://github.com/YOUR_USERNAME/futunn-portfolio-monitor.git
+git clone https://github.com/zhaochunyuan/futunn-portfolio-monitor.git
 cd futunn-portfolio-monitor
 ```
 
-### 2. 安装依赖
+### 2. 创建推送渠道（任选其一或全选）
 
-```bash
-python3 -m venv venv
-source venv/bin/activate    # Windows: venv\Scripts\activate
-
-# 国内推荐清华镜像
-pip install -i https://pypi.tuna.tsinghua.edu.cn/simple -r requirements.txt
-```
-
-### 3. 创建钉钉机器人
-
+**钉钉机器人（加签）：**
 1. 钉钉群 → 群设置 → **智能群助手** → **添加机器人** → **自定义**
 2. 安全设置选 **加签**（不要选关键词或IP白名单）
 3. 复制 **Webhook** 和 **加签密钥**
 
-### 4. 配置环境变量
+**Discord Webhook：**
+1. Discord 服务器 → 频道右键 → **编辑频道** → **整合** → **Webhook**
+2. 新建 Webhook → 复制 URL
+
+### 3. 配置环境变量
 
 ```bash
 cp .env.example .env
-# 编辑 .env，填入你的钉钉 Webhook、Secret、组合 ID
+# 编辑 .env，填入你的 PORTFOLIO_IDS、钉钉和/或 Discord 配置
 ```
 
-组合 ID 从富途 APP 的模拟组合分享链接里获取，URL 里的 `portfolio_id=XXXXXX`。
+### 4. 选择部署方式
 
-### 5. 运行
-
-```bash
-python monitor.py
-```
-
-启动成功后，钉钉群会收到"富途组合监控已启动"通知。按 Ctrl+C 停止。
+- [🐳 Docker（推荐，最简单）](#-docker-部署推荐)
+- [🐧 Linux（systemd 服务）](#-linux-systemd-部署)
+- [🍎 macOS（launchd）](#-macos-部署)
+- [🪟 Windows（任务计划）](#-windows-部署)
 
 ---
 
-## 🐧 Linux 生产部署（systemd）
+## 🐳 Docker 部署（推荐）
 
-推荐 Ubuntu 22.04 / 24.04，配合 systemd 实现开机自启、崩溃自动重启。
+最简单的部署方式，一条命令拉起。
+
+### 前置要求
+
+- 安装 [Docker](https://docs.docker.com/get-docker/) 和 [Docker Compose](https://docs.docker.com/compose/install/)
+- 已创建 `.env` 文件
+
+### 启动
+
+```bash
+docker compose up -d
+```
+
+首次会自动构建镜像（约 1-2 分钟），之后立即启动。启动成功后，配置的推送渠道会收到"监控已启动"消息。
+
+### 常用命令
+
+| 操作 | 命令 |
+|---|---|
+| 查看实时日志 | `docker compose logs -f` |
+| 查看状态 | `docker compose ps` |
+| 重启 | `docker compose restart` |
+| 停止 | `docker compose down` |
+| 修改配置后重启 | 编辑 `.env` → `docker compose up -d` |
+| 重新构建镜像 | `docker compose build --no-cache` |
+
+### 直接用 docker run（不用 compose）
+
+```bash
+docker build -t futunn-monitor .
+docker run -d \
+  --name futunn-monitor \
+  --restart unless-stopped \
+  --env-file .env \
+  futunn-monitor
+```
+
+### 数据持久化
+
+当前版本的持仓快照只存在内存中，容器重启后会重新初始化（首次无推送，第二次起检测变化）。如果需要跨重启保留，可自行挂载 volume 并改造代码把 `previous_positions` 持久化到文件。
+
+---
+
+## 🐧 Linux systemd 部署
+
+适合 VPS，开机自启 + 崩溃自动重启。推荐 Ubuntu 22.04 / 24.04。
 
 ```bash
 # 1. 放到标准路径
@@ -112,7 +148,7 @@ sudo mkdir -p /opt/futunn_monitor
 sudo cp monitor.py .env /opt/futunn_monitor/
 cd /opt/futunn_monitor
 sudo python3 -m venv venv
-sudo ./venv/bin/pip install -i https://pypi.tuna.tsinghua.edu.cn/simple -r requirements.txt
+sudo ./venv/bin/pip install -i https://pypi.tuna.tsinghua.edu.cn/simple -r /path/to/requirements.txt
 
 # 2. 安装 systemd 服务
 sudo cp futunn-monitor.service /etc/systemd/system/
@@ -123,8 +159,6 @@ sudo systemctl enable --now futunn-monitor
 sudo systemctl status futunn-monitor
 sudo journalctl -u futunn-monitor -f
 ```
-
-常用命令：
 
 | 操作 | 命令 |
 |---|---|
@@ -138,15 +172,18 @@ sudo journalctl -u futunn-monitor -f
 
 ## 🍎 macOS 部署
 
-### 前台运行（测试用）
+### 前台运行（测试）
 
 ```bash
+python3 -m venv venv
+source venv/bin/activate
+pip install -r requirements.txt
 python monitor.py
 ```
 
-### 后台常驻（launchd，开机自启）
+### 后台常驻（launchd）
 
-创建 `~/Library/LaunchAgents/com.futunn.monitor.plist`，参考 [launchd 官方文档](https://www.launchd.info/)。示例：
+创建 `~/Library/LaunchAgents/com.futunn.monitor.plist`：
 
 ```xml
 <?xml version="1.0" encoding="UTF-8"?>
@@ -177,33 +214,26 @@ launchctl load ~/Library/LaunchAgents/com.futunn.monitor.plist
 launchctl start com.futunn.monitor
 ```
 
-卸载：
-```bash
-launchctl unload ~/Library/LaunchAgents/com.futunn.monitor.plist
-```
-
 ---
 
 ## 🪟 Windows 部署
 
 ### 1. 安装 Python
 
-从 [python.org](https://www.python.org/downloads/windows/) 下载 Python 3.12 安装包，安装时**勾选 "Add Python to PATH"**。
+从 [python.org](https://www.python.org/downloads/windows/) 下载 Python 3.12，安装时**勾选 "Add Python to PATH"**。
 
-### 2. 项目初始化
-
-打开 `cmd` 或 PowerShell：
+### 2. 初始化
 
 ```cmd
 cd D:\futunn-portfolio-monitor
 python -m venv venv
 venv\Scripts\activate
 pip install -r requirements.txt
+copy .env.example .env
+notepad .env  :: 编辑配置
 ```
 
-### 3. 编辑 `.env`（复制 `.env.example` 重命名）
-
-### 4. 创建启动脚本 `start.bat`
+### 3. 启动脚本 `start.bat`
 
 ```bat
 @echo off
@@ -213,9 +243,7 @@ venv\Scripts\python.exe monitor.py
 pause
 ```
 
-双击即可运行。
-
-### 5. 后台常驻（任务计划程序）
+### 4. 开机自启（任务计划程序）
 
 1. Win+R → `taskschd.msc` → 创建任务
 2. 常规：勾选"不管用户是否登录都要运行"、"使用最高权限"
@@ -232,10 +260,13 @@ pause
 
 ```
 futunn-portfolio-monitor/
-├── monitor.py                 # 主监控脚本
-├── .env.example               # 配置模板（复制为 .env 后填入真实值）
+├── monitor.py                 # 主脚本
+├── .env.example               # 配置模板
 ├── requirements.txt           # Python 依赖
-├── futunn-monitor.service     # Linux systemd 服务定义
+├── Dockerfile                 # Docker 镜像定义
+├── docker-compose.yml         # Docker Compose 编排
+├── .dockerignore
+├── futunn-monitor.service     # Linux systemd 服务模板
 ├── .gitignore
 ├── LICENSE
 └── README.md
@@ -250,10 +281,13 @@ futunn-portfolio-monitor/
 | 变量 | 必需 | 默认 | 说明 |
 |---|---|---|---|
 | `PORTFOLIO_IDS` | ✅ | - | 组合 ID 列表，逗号分隔 |
-| `DINGTALK_WEBHOOK` | ✅ | - | 钉钉机器人 Webhook URL |
-| `DINGTALK_SECRET` | ✅ | - | 钉钉机器人加签密钥（SEC 开头） |
-| `CHECK_INTERVAL` | ❌ | 36 | 检查间隔秒数，建议 30-60 |
+| `DINGTALK_WEBHOOK` | ⭕ | - | 钉钉机器人 Webhook（和 Discord 至少配一个） |
+| `DINGTALK_SECRET` | ⭕ | - | 钉钉加签密钥（SEC 开头） |
+| `DISCORD_WEBHOOK` | ⭕ | - | Discord Webhook URL |
+| `CHECK_INTERVAL` | ❌ | 36 | 检查间隔秒数 |
 | `CHANGE_THRESHOLD` | ❌ | 2.0 | 权重变化阈值（百分点） |
+
+> ⭕ = 钉钉和 Discord 至少配置一个，两个都配则同时推送。
 
 ---
 
@@ -262,12 +296,8 @@ futunn-portfolio-monitor/
 ### 数据接口
 
 ```
-GET https://portfolio.futunn.com/portfolio-api/get-portfolio-position
+GET https://portfolio.futunn.com/portfolio-api/get-portfolio-position?portfolio_id={id}&language=0
 ```
-
-**请求参数：**
-- `portfolio_id`（必填）：组合 ID
-- `language`：语言代码，`0` 为中文
 
 **必须的请求头：**
 ```
@@ -278,13 +308,13 @@ Accept-Language: zh-CN,zh;q=0.9
 ```
 
 **返回字段（关键）：**
-- `code`：0 成功，其他为错误码（`-12009` = IP 风控）
+- `code`：0 成功，`-12009` = IP 风控
 - `data.portfolio_name`：组合名称
 - `data.record_items[]`：持仓列表
-  - `stock_code`, `stock_name`：股票代码、名称
-  - `position_ratio`：仓位比例（需除以 10^7 得百分比）
-  - `cost_price`, `current_price`：价格（需除以 10^9）
-  - `profit_and_loss_ratio`：盈亏比例（需除以 10^7）
+  - `stock_code`, `stock_name`：股票代码/名称
+  - `position_ratio`：仓位比例（÷ 10^7 得百分比）
+  - `cost_price`, `current_price`：价格（÷ 10^9）
+  - `profit_and_loss_ratio`：盈亏比例（÷ 10^7）
 
 ---
 
@@ -293,17 +323,32 @@ Accept-Language: zh-CN,zh;q=0.9
 <details>
 <summary><b>API 返回 <code>{"code":-12009}</code></b></summary>
 
-**原因：** 出口 IP 在富途黑名单（海外 IP 基本都被拒）。
-
-**解决：** 换到中国大陆或香港的服务器/网络。
+出口 IP 在富途黑名单（海外 IP 基本都被拒）。换中国大陆或香港的服务器/网络。
 </details>
 
 <details>
 <summary><b>钉钉推送失败 <code>errcode: 310000</code></b></summary>
 
-**原因：** Webhook URL 或 Secret 错误，或加签模式不对。
+检查机器人安全设置是否选的"加签"，密钥是否以 `SEC` 开头。
+</details>
 
-**解决：** 检查机器人安全设置是否选的"加签"，密钥是否以 `SEC` 开头。
+<details>
+<summary><b>Discord 推送超时或 403</b></summary>
+
+- 中国大陆服务器无法访问 Discord（需要海外或香港服务器/代理）
+- 检查 Webhook URL 是否完整（含 `/webhooks/ID/TOKEN`）
+- Webhook 被删除或 token 失效也会 403/404
+</details>
+
+<details>
+<summary><b>Docker 容器启动失败</b></summary>
+
+```bash
+docker compose logs     # 看启动错误
+docker compose down && docker compose up -d --build   # 重新构建
+```
+
+常见原因：`.env` 文件缺失、`PORTFOLIO_IDS` 没填、推送渠道都没配置。
 </details>
 
 <details>
@@ -318,8 +363,7 @@ pip install -i https://pypi.tuna.tsinghua.edu.cn/simple -r requirements.txt
 <details>
 <summary><b>调仓没推送</b></summary>
 
-可能原因：
-- 权重变化小于 `CHANGE_THRESHOLD`（默认 2.0%）→ 调小阈值
+- 权重变化 < `CHANGE_THRESHOLD`（默认 2.0%）→ 调小阈值
 - 首次运行只初始化，第二轮开始才检测变化
 - 调仓后又被调回，两次检查间隙未捕获
 </details>
