@@ -1,0 +1,16 @@
+[Unit]
+Description=Futunn Portfolio Monitor (DingTalk)
+After=network.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/opt/futunn_monitor
+ExecStart=/opt/futunn_monitor/venv/bin/python /opt/futunn_monitor/monitor.py
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
